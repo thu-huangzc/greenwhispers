@@ -1,0 +1,25 @@
+/* 重置默认边距 */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* 隐藏滚动条并设置全屏 */
+body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: #000; /* 给个默认黑底 */
+}
+
+/* Canvas 样式配置 */
+#bg-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    /* 移除 pointer-events: none; 以便接收点击事件 */
+    cursor: pointer; /* 提示用户这里可以点击 */
+}

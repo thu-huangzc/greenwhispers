@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>动画开发游乐场</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@300&display=swap" rel="stylesheet">
+  
+  <style>
+    /* 基础重置，与 index.html 保持一致的底色和排版 */
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #f0f4f8;
+      font-family: "PingFang TC", "PingFang HK", "PingFang SC", -apple-system, "Microsoft JhengHei", "Heiti TC", sans-serif;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      cursor: default; /* 如果需要自定义光标可以在这里重写 */
+    }
+
+    /* 
+      在这里编写你的新动画样式
+      ---------------------------------
+    */
+    #animation-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* 统一控制 SVG 内所有线条的颜色和粗细 */
+    #pentagon {
+      stroke: black;        /* <--- 在这里统一修改颜色 */
+      stroke-width: 0.3;   /* <--- 在这里统一修改粗细 */
+      /* 
+         整个动画流程的总时长重新计算：
+         五边形(0-1s) + 外接圆(1-2s) + 大五角星与内部射线同时画出(2-3s) + 小圆画出(3-4s) + 小圆外移(4-5.5s)
+         所以总时长设定为 5.5s。
+         要求：缓入缓出(ease-in-out)，旋转 360 度，执行一次停在最后状态(forwards)
+      */
+      animation: rotateAll 5.5s ease-in-out forwards;
+    }
+
+    @keyframes rotateAll {
+      from {
+        transform: rotate(0deg);
+      }
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* 五边形描边动画 */
+    .draw-pentagon {
+      /* 五边形周长大约为 470.2 (边长约 94.04 * 5) */
+      stroke-dasharray: 471;
+      stroke-dashoffset: 471;
+      /* 
+         修改为 1s 时长。
+         使用自定义贝塞尔曲线 (cubic-bezier) 让缓入缓出更夸张：
+         两头极慢，中间极快。
+      */
+      animation: drawLine 1s cubic-bezier(0.85, 0, 0.15, 1) forwards;
+    }
+
+    /* 外接圆描边动画 */
+    .draw-circle {
+      /* 圆的周长 2 * PI * r = 2 * 3.14159 * 80 ≈ 502.65 */
+      stroke-dasharray: 503;
+      stroke-dashoffset: 503;
+      /* 
+         动画延迟 1s (等五边形画完)，时长 1s。
+         同样使用缓入缓出的贝塞尔曲线。
+      */
+      animation: drawLine 1s cubic-bezier(0.85, 0, 0.15, 1) 1s forwards;
+    }
+
+    /* 五角星(连结对角线)描边动画 */
+    .draw-star {
+      /* 
+         五角星边长计算：2 * r * cos(18°) = 2 * 80 * 0.951 = 152.16
+         总长：152.16 * 5 ≈ 761
+      */
+      stroke-dasharray: 761;
+      stroke-dashoffset: 761;
+      /* 延迟 2s (等五边形和圆都画完)，时长 1s，缓入缓出 */
+      animation: drawLine 1s cubic-bezier(0.85, 0, 0.15, 1) 2s forwards;
+    }
+
+    /* 内部小五角星（倒五角星）从中心向两端生长的动画 */
+    .draw-inner-lines {
+      /* 
+         内部五角星线段延长至外层正五边形的边。
+         经重新计算，这条水平延长线的全长为 123.11。
+         我们设定 dasharray 为单侧长度的 2 倍多一点，比如 125。
+      */
+      stroke-dasharray: 0 125;
+      stroke-dashoffset: 0;
+      /* 
+         初始时设为完全透明，防止 stroke-linecap="round" 在 dasharray 为 0 时画出一个圆点。
+         在动画开始时变为不透明。
+      */
+      opacity: 0;
+      /* 修改：延迟 2s (与大五角星同时出现)，时长保持 1s (为了和大五角星同步画完，这里从 0.5s 改为 1s) */
+      animation: drawCenterOut 1s cubic-bezier(0.85, 0, 0.15, 1) 2s forwards;
+    }
+
+    @keyframes drawLine {
+      to {
+        stroke-dashoffset: 0;
+      }
+    }
+
+    @keyframes drawCenterOut {
+      0% {
+        opacity: 1;
+        stroke-dasharray: 0 125;
+      }
+      100% {
+        opacity: 1;
+        stroke-dasharray: 125 0;
+      }
+    }
+    /* 5个小正圆形描边动画 */
+    .draw-small-circles {
+      /* 
+         小圆半径计算：r_small ≈ 11.67
+         周长 2 * PI * r ≈ 73.3
+      */
+      stroke-dasharray: 74;
+      stroke-dashoffset: 74;
+      opacity: 0;
+      /* 
+         修改延迟：因为内部射线现在是 2s-3s 画完，
+         所以小圆的出现延迟提前到 3s。时长 1s。
+      */
+      animation: drawCircleAnim 1s cubic-bezier(0.85, 0, 0.15, 1) 3s forwards;
+    }
+
+    @keyframes drawCircleAnim {
+      0% {
+        opacity: 1;
+        stroke-dashoffset: 74;
+      }
+      100% {
+        opacity: 1;
+        stroke-dashoffset: 0;
+      }
+    }
+
+    /* 5个小圆移动到外层五边形顶点的动画 */
+    @keyframes moveToVertexAnim {
+      0% {
+        transform: translateY(0);
+      }
+      100% {
+        /* 
+           外层五边形顶点半径 = 80
+           当前圆心半径 = 11.67
+           需要向上移动距离 = 80 - 11.67 = 68.33
+        */
+        transform: translateY(-68.33px);
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 动画内容容器 -->
+  <div id="animation-container">
+    <!-- 正五边形 SVG -->
+    <svg id="pentagon" width="200" height="200" viewBox="-100 -100 200 200" xmlns="http://www.w3.org/2000/svg">
+      <!-- 
+        使用 path 替代 polygon，明确起点在顶部 (0, -80)
+        M: Move to (起点)
+        L: Line to (连线到各个顶点)
+        Z: Close path (闭合回到起点)
+      -->
+      <path 
+        class="draw-pentagon"
+        d="M 0,-80 L 76.08,-24.72 L 47.02,64.72 L -47.02,64.72 L -76.08,-24.72 Z" 
+        fill="none" 
+        stroke-linejoin="round"
+      />
+
+      <!-- 
+        外接圆，半径为 80。
+        为了让画圆的起点和五边形的结束点（即最上面的顶点 0, -80）重合，并且能使用 dasharray 动画，
+        我们用两个半圆弧 (A 标签) 拼成一个完整的圆，起点设为 M 0,-80。
+        A rx ry x-axis-rotation large-arc-flag sweep-flag x y
+      -->
+      <path 
+        class="draw-circle"
+        d="M 0,-80 
+           A 80 80 0 0 1 0,80 
+           A 80 80 0 0 1 0,-80" 
+        fill="none" 
+        stroke-linecap="round"
+      />
+
+      <!-- 
+        五角星连线 (连接五边形的隔点)
+        起点也是 0, -80。
+        连线顺序：P0 -> P2 -> P4 -> P1 -> P3 -> P0
+        P0 (0, -80)
+        P2 (47.02, 64.72)
+        P4 (-76.08, -24.72)
+        P1 (76.08, -24.72)
+        P3 (-47.02, 64.72)
+      -->
+      <path 
+        class="draw-star"
+        d="M 0,-80 L 47.02,64.72 L -76.08,-24.72 L 76.08,-24.72 L -47.02,64.72 Z" 
+        fill="none" 
+        stroke-linejoin="round"
+      />
+
+      <!-- 
+        内部小五角星（倒五角星）延长至外层大正五边形边框。
+        
+        大五角星内部交点的所在圆半径（r_inner）：
+        r_inner = 80 * (3 - sqrt(5)) / 2 ≈ 30.557
+        
+        倒置五角星的一条水平对角线，其 y 坐标为：
+        y = r_inner * cos(72°) ≈ 30.557 * 0.309017 ≈ 9.44
+        
+        这条水平线需要向左右两端延长，直到碰到最外层大正五边形的边框。
+        外层大正五边形的底边是 V2(47.02, 64.72) 到 V3(-47.02, 64.72) 的水平线。
+        而 V1(76.08, -24.72) 到 V2(47.02, 64.72) 是一条斜边。
+        我们需要求水平线 y = 9.44 与这条斜边 V1-V2 的交点：
+        
+        直线 V1-V2 的方程：
+        斜率 m = (64.72 - (-24.72)) / (47.02 - 76.08) = 89.44 / -29.06 ≈ -3.0778
+        代入 y = 9.44：
+        x - 47.02 = (9.44 - 64.72) / -3.0778
+        x - 47.02 = -55.28 / -3.0778 ≈ 17.96
+        
+        等等，上面算出来 x=17.96 并不对，实际上根据对称性，外层五边形的内部水平弦长。
+        精确公式：
+        外层五边形半径 R = 80。
+        弦的 y 坐标 = 9.4427。
+        右侧斜边的直线方程（V1到V2）：
+        x1 = R*sin(72) = 76.0845, y1 = -R*cos(72) = -24.7214
+        x2 = R*sin(144) = 47.0228, y2 = -R*cos(144) = 64.7214
+        交点的 x = x1 + (x2 - x1) * (y - y1) / (y2 - y1)
+        x = 76.0845 + (47.0228 - 76.0845) * (9.4427 - (-24.7214)) / (64.7214 - (-24.7214))
+        x = 76.0845 + (-29.0617) * 34.1641 / 89.4428
+        x = 76.0845 + (-29.0617) * 0.381966
+        x = 76.0845 - 11.1006 = 64.9839
+        
+        所以，这条横跨内部的延长线，交于外层五边形的左右边框。
+        其 y = 9.44，x 从 -64.98 到 64.98。
+        总长度约为 130。
+        
+        为了实现从中心向两端生长，我们将起点设为 (0, 9.44)，
+        向左画到 (-64.98, 9.44)，再回到中心，向右画到 (64.98, 9.44)。
+      -->
+      
+      <g class="draw-inner-lines" fill="none" stroke-linecap="round">
+        <!-- 
+          每条线由中心点 (0, 9.44) 分别向左右两端延伸到 (-64.98, 9.44) 和 (64.98, 9.44)。
+        -->
+        <path d="M 0,9.44 L -64.98,9.44 M 0,9.44 L 64.98,9.44" />
+        <path d="M 0,9.44 L -64.98,9.44 M 0,9.44 L 64.98,9.44" transform="rotate(72)" />
+        <path d="M 0,9.44 L -64.98,9.44 M 0,9.44 L 64.98,9.44" transform="rotate(144)" />
+        <path d="M 0,9.44 L -64.98,9.44 M 0,9.44 L 64.98,9.44" transform="rotate(216)" />
+        <path d="M 0,9.44 L -64.98,9.44 M 0,9.44 L 64.98,9.44" transform="rotate(288)" />
+      </g>
+
+      <!-- 
+        5个小正圆形。
+        我们将圆心设在最上方 C0 (0, -11.67)，半径 r = 13.05。
+        通过添加额外的 class 和 id，我们可以在画圆结束后用 CSS 动画把它们平移到外层正五边形的顶点上。
+        外层正五边形的顶点距离中心的半径是 80。
+        最上方顶点原本是 (0, -80)。
+        所以这个圆需要向上移动 (80 - 11.67) = 68.33。
+      -->
+      <g class="draw-small-circles" fill="none">
+        <circle class="move-to-vertex" cx="0" cy="-11.67" r="13.05" style="stroke-dasharray: 82; stroke-dashoffset: 82; animation: drawCircleAnim 1s cubic-bezier(0.85, 0, 0.15, 1) 3s forwards, moveToVertexAnim 1.5s cubic-bezier(0.85, 0, 0.15, 1) 4s forwards;" />
+        <g transform="rotate(72)"><circle class="move-to-vertex" cx="0" cy="-11.67" r="13.05" style="stroke-dasharray: 82; stroke-dashoffset: 82; animation: drawCircleAnim 1s cubic-bezier(0.85, 0, 0.15, 1) 3s forwards, moveToVertexAnim 1.5s cubic-bezier(0.85, 0, 0.15, 1) 4s forwards;" /></g>
+        <g transform="rotate(144)"><circle class="move-to-vertex" cx="0" cy="-11.67" r="13.05" style="stroke-dasharray: 82; stroke-dashoffset: 82; animation: drawCircleAnim 1s cubic-bezier(0.85, 0, 0.15, 1) 3s forwards, moveToVertexAnim 1.5s cubic-bezier(0.85, 0, 0.15, 1) 4s forwards;" /></g>
+        <g transform="rotate(216)"><circle class="move-to-vertex" cx="0" cy="-11.67" r="13.05" style="stroke-dasharray: 82; stroke-dashoffset: 82; animation: drawCircleAnim 1s cubic-bezier(0.85, 0, 0.15, 1) 3s forwards, moveToVertexAnim 1.5s cubic-bezier(0.85, 0, 0.15, 1) 4s forwards;" /></g>
+        <g transform="rotate(288)"><circle class="move-to-vertex" cx="0" cy="-11.67" r="13.05" style="stroke-dasharray: 82; stroke-dashoffset: 82; animation: drawCircleAnim 1s cubic-bezier(0.85, 0, 0.15, 1) 3s forwards, moveToVertexAnim 1.5s cubic-bezier(0.85, 0, 0.15, 1) 4s forwards;" /></g>
+      </g>
+
+    </svg>
+  </div>
+
+  <script>
+    /* 
+      在这里编写你的新动画交互逻辑
+      ---------------------------------
+    */
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('动画开发环境已准备就绪。');
+      
+      // 你可以在这里开始写动画脚本，比如点击事件等
+      
+    });
+  </script>
+
+</body>
+</html>

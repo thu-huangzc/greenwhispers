@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cursor Text Group Test</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC&display=swap');
+
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: #f0f4f8;
+      cursor: none !important; /* 隐藏原生光标 */
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      font-family: sans-serif;
+    }
+
+    .hint-text {
+      color: #666;
+      font-size: 20px;
+      margin-bottom: 40px;
+    }
+
+    .hover-target {
+      width: 300px;
+      height: 300px;
+      border: 2px dashed #999;
+      border-radius: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: #888;
+      font-size: 16px;
+      transition: background-color 0.3s;
+    }
+    
+    .hover-target:hover {
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    /* -------------------------------------
+       自定义DOM光标
+       ------------------------------------- */
+    .custom-cursor {
+      position: fixed;
+      top: -100px;
+      left: -100px;
+      width: 32px;
+      height: 32px;
+      pointer-events: none;
+      z-index: 9999999;
+      /* 这里的 width/height 会影响外围圆圈的大小 */
+      transition: transform 0.15s ease-out, width 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), height 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      transform: translate(-50%, -50%) scale(1);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .custom-cursor.clicked {
+      transform: translate(-50%, -50%) scale(0.75);
+    }
+    
+    /* === 微调位置 1：光标外围圆圈放大的最终尺寸 === */
+    /* 默认 80x80 如果包裹不住复杂的文字组，可以把这里的数值调大，比如 100px 或者 120px */
+    .custom-cursor.ready {
+      width: 90px;  /* 从80改大，给文字组留空间 */
+      height: 90px;
+    }
+    
+    .custom-cursor .cursor-img {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+
+    /* === 微调位置 2：整个文字组的定位 === */
+    .custom-cursor .cursor-text-group {
+      position: absolute;
+      top: 50%; 
+      left: 50%;
+      /* 初始状态：透明且缩小为0 */
+      transform: translate(-50%, -50%) scale(0);
+      transform-origin: center;
+      
+      display: flex;
+      flex-direction: column;
+      align-items: center; /* 默认居中对齐 */
+      
+      z-index: 1;
+      font-family: "PingFang TC", "PingFang HK", "PingFang SC", -apple-system, "Microsoft JhengHei", "Heiti TC", sans-serif;
+      color: #333;
+      opacity: 0;
+      /* 动画过渡时间和缓动函数 */
+      transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .custom-cursor.ready .cursor-text-group {
+      /* 放大后的状态：完全不透明且正常大小 */
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+
+    /* === 微调位置 3：各行文字的字号、字重与间距 === */
+    
+    /* 基础参照字号：播种/播放 的字号，原版是18px */
+    :root {
+      --base-font-size: 18px; 
+    }
+
+    /* 第一行排版容器：包含“点击”和“click” */
+    .text-row-top {
+      display: flex;
+      justify-content: space-between;
+      width: 91%; /* 与主文字（播种）等宽，以便实现左对齐和右对齐 */
+      margin-bottom: 2px; /* 与主文字的间距 */
+      align-items: flex-end; /* 底部对齐 */
+    }
+
+    /* 点击：在播种上面且左对齐，字号是播种的 7/18 (7px)，字重 light */
+    .text-click-cn {
+      font-size: calc(var(--base-font-size) * 7 / 18); /* 7px */
+      font-weight: 800; /* light */
+    }
+
+    /* click：在播种上面且右对齐，字号是播种的 4/9 即 8/18 (8px)，字重 light */
+    .text-click-en {
+      font-size: calc(var(--base-font-size) * 4 / 9); /* 8px */
+      font-weight: 800; /* light */
+    }
+
+    /* 播放/播种：主文字，字重 medium */
+    .text-main {
+      font-size: var(--base-font-size); /* 18px */
+      font-weight: 500; /* medium */
+      line-height: 1;
+    }
+
+    /* sow：在播种下面且居中对齐，字号是播种的 2/3 (12px)，字重 medium */
+    .text-sow {
+      font-size: calc(var(--base-font-size) * 2 / 3); /* 12px */
+      font-weight: 500; /* medium */
+      margin-top: -1.5px; /* 与主文字的间距 */
+    }
+
+    /* -------------------------------------
+       点击水波纹
+       ------------------------------------- */
+    .cursor-click-effect {
+      position: fixed;
+      pointer-events: none;
+      border: 2px solid rgba(161, 140, 209, 0.8);
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      animation: click-ripple 0.5s ease-out forwards;
+      z-index: 9999998;
+    }
+
+    @keyframes click-ripple {
+      0% { width: 0px; height: 0px; opacity: 1; border-width: 3px; }
+      100% { width: 50px; height: 50px; opacity: 0; border-width: 1px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="hint-text">移动鼠标查看光标，进入虚线框体验缩放动效</div>
+  
+  <div id="hover-target" class="hover-target">
+    悬停此处放大光标
+  </div>
+
+  <!-- 自定义光标 DOM -->
+  <div id="custom-cursor" class="custom-cursor"> <!-- 默认去掉 ready 状态 -->
+    <!-- 外围圆圈 SVG -->
+    <svg class="cursor-img" viewBox="0 0 25.07 23.89" preserveAspectRatio="xMidYMid meet">
+      <path fill="#fff" d="M4.32,20.22c-1.14-1.14-1.86-2.49-2.44-3.89S.25,13.41.25,11.86s1.46-2.84,2.06-4.29.65-3.14,1.79-4.28S6.56,1.07,7.96.49s3.17.14,4.71.14,3.03-.18,4.48.42,2.45,1.61,3.59,2.75,1.91,2.29,2.49,3.69,1.6,2.82,1.6,4.37-.81,3-1.41,4.45-1.26,2.76-2.4,3.9-2.47,1.87-3.87,2.45-2.92.95-4.47.95-3.25.2-4.7-.4-2.52-1.85-3.66-2.99Z"/>
+      <path fill="none" stroke="#000" stroke-miterlimit="10" stroke-width="0.5" vector-effect="non-scaling-stroke" d="M4.32,20.22c-1.14-1.14-1.86-2.49-2.44-3.89S.25,13.41.25,11.86s1.46-2.84,2.06-4.29.65-3.14,1.79-4.28S6.56,1.07,7.96.49s3.17.14,4.71.14,3.03-.18,4.48.42,2.45,1.61,3.59,2.75,1.91,2.29,2.49,3.69,1.6,2.82,1.6,4.37-.81,3-1.41,4.45-1.26,2.76-2.4,3.9-2.47,1.87-3.87,2.45-2.92.95-4.47.95-3.25.2-4.7-.4-2.52-1.85-3.66-2.99Z"/>
+    </svg>
+    
+    <!-- 新的复杂文字组 -->
+    <div class="cursor-text-group">
+      <!-- 第一行：左右对齐的 点击 和 click -->
+      <div class="text-row-top">
+        <span class="text-click-cn">点击</span>
+        <span class="text-click-en">click</span>
+      </div>
+      <!-- 第二行：主文字 播种 -->
+      <span class="text-main">播种</span>
+      <!-- 第三行：居中对齐的 sow -->
+      <span class="text-sow">sow</span>
+    </div>
+  </div>
+
+  <script>
+    const customCursor = document.getElementById('custom-cursor');
+    const hoverTarget = document.getElementById('hover-target');
+    
+    // 控制光标状态的交互
+    hoverTarget.addEventListener('mouseenter', () => {
+      customCursor.classList.add('ready');
+    });
+    
+    hoverTarget.addEventListener('mouseleave', () => {
+      customCursor.classList.remove('ready');
+    });
+
+    document.addEventListener('mousemove', function(e) {
+      customCursor.style.left = e.clientX + 'px';
+      customCursor.style.top = e.clientY + 'px';
+    });
+
+    document.addEventListener('mousedown', function(e) {
+      customCursor.classList.add('clicked');
+
+      const ripple = document.createElement('div');
+      ripple.className = 'cursor-click-effect';
+      ripple.style.left = e.clientX + 'px';
+      ripple.style.top = e.clientY + 'px';
+      document.body.appendChild(ripple);
+
+      setTimeout(() => ripple.remove(), 500);
+    });
+
+    document.addEventListener('mouseup', function() {
+      customCursor.classList.remove('clicked');
+    });
+
+    document.addEventListener('mouseleave', () => customCursor.style.display = 'none');
+    document.addEventListener('mouseenter', () => customCursor.style.display = 'flex');
+  </script>
+</body>
+</html>

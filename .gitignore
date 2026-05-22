@@ -1,0 +1,70 @@
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+
+# ===== Large media assets (excluded from git) =====
+
+# Top-level large video file
+movie.mp4
+
+# Archived assets (large, legacy)
+_archive/
+
+# Sunflower frame sequences and large audio
+sunflower-assets/sunflower_base/
+sunflower-assets/sunflower_glow/
+sunflower-assets/sunflower_grow/
+sunflower-assets/sunflower_idle/
+sunflower-assets/sunflower_sow/
+sunflower-assets/*.mp3
+
+# Video frame sequences for each plant (keep index.html / script.js / style.css)
+video-dodder/dodder_bugflyin/
+video-dodder/dodder_grow/
+video-dodder/dodder_hold/
+video-dodder/dodder_idle/
+video-dodder/*.mp3
+
+video-flytrap/flytrap_bugflyin/
+video-flytrap/flytrap_close/
+video-flytrap/flytrap_grow/
+video-flytrap/flytrap_idle1/
+video-flytrap/flytrap_idle2/
+video-flytrap/*.mp3
+
+video-mimosa/mimosa_close1/
+video-mimosa/mimosa_close2/
+video-mimosa/mimosa_grow/
+video-mimosa/mimosa_idle1/
+video-mimosa/mimosa_idle2/
+video-mimosa/mimosa_open/
+video-mimosa/*.mp3
+
+video-oenothera/oenothera_bugflyin/
+video-oenothera/oenothera_grow/
+video-oenothera/oenothera_hold/
+video-oenothera/oenothera_idle/
+video-oenothera/*.mp3
+
+# Generic catch-all for large media (defense-in-depth)
+*.mp4
+*.mov
+*.avi
+*.webm
+
+# Keep small notification sound (under 100KB) explicitly if needed
+!video-dodder/icon_notification.mp3
+!video-flytrap/icon_notification.mp3
+!video-mimosa/icon_notification.mp3
+!video-oenothera/icon_notification.mp3

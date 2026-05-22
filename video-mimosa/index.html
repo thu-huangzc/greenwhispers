@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全屏视频交互项目</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- 替换为 Canvas，用于绘制 PNG 序列帧 -->
+    <canvas id="bg-canvas"></canvas>
+    
+    <!-- 添加音频元素 -->
+    <audio id="baseAudio" src="mimosa_base_s.mp3" loop preload="auto"></audio>
+    <audio id="growAudio" src="mimosa_grow_s.mp3" preload="auto"></audio>
+    <audio id="closeOpenAudio" src="mimosa_close&open_s.mp3" preload="auto"></audio>
+    <audio id="idle2Audio" src="mimosa_idle2_s.mp3" preload="auto"></audio>
+    <audio id="hintAudio" src="icon_notification.mp3" preload="auto"></audio>
+
+    <script src="script.js"></script>
+</body>
+</html>
