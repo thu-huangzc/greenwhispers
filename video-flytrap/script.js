@@ -488,14 +488,39 @@ function drawImageToCtx(img, alpha = 1.0) {
     if (alpha !== 1.0) ctx.globalAlpha = 1.0;
 }
 
+// === 渲染聚光灯（周围压暗，中心镂空）===
+// fadeAlpha: 0~1，用于状态切换时整体淡入淡出
+function drawHintSpotlight(ctx, timestamp, x, y, fadeAlpha = 1) {
+    const { baseRadius, pulseSpeed } = hintCircleConfig;
+    // 中心透明圈：略大于呼吸圆环最大状态（baseRadius * 1.3），完全不遮挡圆环
+    const innerRadius = baseRadius * 1.6;
+    // 暗化羽化到画布最远角的距离，让暗化覆盖整个画布且边缘自然过渡
+    const w = ctx.canvas.width;
+    const h = ctx.canvas.height;
+    const outerRadius = Math.hypot(Math.max(x, w - x), Math.max(y, h - y));
+    // 暗化强度跟随同一呼吸节奏，柔和起伏
+    const breath = 0.85 + Math.sin(timestamp * pulseSpeed) * 0.15; // 0.7 ~ 1.0
+    const darkAlpha = 0.55 * breath * fadeAlpha; // 最暗处的透明度
+
+    ctx.save();
+    const grad = ctx.createRadialGradient(x, y, innerRadius, x, y, outerRadius);
+    grad.addColorStop(0,    'rgba(0, 0, 0, 0)');
+    grad.addColorStop(0.25, `rgba(0, 0, 0, ${darkAlpha * 0.35})`);
+    grad.addColorStop(0.6,  `rgba(0, 0, 0, ${darkAlpha * 0.75})`);
+    grad.addColorStop(1,    `rgba(0, 0, 0, ${darkAlpha})`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+}
+
 // === 渲染提示圆环的函数 ===
-function drawHintCircle(ctx, timestamp, x, y) {
+function drawHintCircle(ctx, timestamp, x, y, fadeAlpha = 1) {
     const { baseRadius, pulseSpeed, whiteLineWidth, blackStrokeWidth } = hintCircleConfig;
     
     // 利用 sin 函数生成一个有回弹呼吸感的缩放比例
     const scale = 1 + Math.sin(timestamp * pulseSpeed) * 0.3; 
     const currentRadius = baseRadius * scale;
-    const alpha = 0.5 + Math.sin(timestamp * pulseSpeed) * 0.3; 
+    const alpha = (0.5 + Math.sin(timestamp * pulseSpeed) * 0.3) * fadeAlpha; 
 
     ctx.save();
     
@@ -520,13 +545,34 @@ function drawHintCircle(ctx, timestamp, x, y) {
     ctx.restore();
 }
 
+// 提示整体淡入淡出（聚光灯 + 圆环）状态
+let __hintFadeAlpha = 0;
+let __hintLastTs = 0;
+const __HINT_FADE_DURATION = 420; // ms，整体淡入淡出时长
+
 // 每个 rAF tick 调用：在 overlay canvas 上绘制 / 清除提示圆环。
 function __updateHintOverlay(timestamp) {
+    const ts = timestamp || performance.now();
+    const dt = __hintLastTs ? Math.min(ts - __hintLastTs, 100) : 16;
+    __hintLastTs = ts;
+
+    const wantShow = (currentState === STATES.IDLE2);
+    const target = wantShow ? 1 : 0;
+    if (__hintFadeAlpha !== target) {
+        const step = dt / __HINT_FADE_DURATION;
+        if (target > __hintFadeAlpha) {
+            __hintFadeAlpha = Math.min(1, __hintFadeAlpha + step);
+        } else {
+            __hintFadeAlpha = Math.max(0, __hintFadeAlpha - step);
+        }
+    }
+
     __hintCtx.clearRect(0, 0, __hintCanvas.width, __hintCanvas.height);
-    if (currentState === STATES.IDLE2) {
+    if (__hintFadeAlpha > 0.001) {
         const hintX = __hintCanvas.width * interactionConfig.hint.x;
         const hintY = __hintCanvas.height * interactionConfig.hint.y;
-        drawHintCircle(__hintCtx, timestamp || performance.now(), hintX, hintY);
+        drawHintSpotlight(__hintCtx, ts, hintX, hintY, __hintFadeAlpha);
+        drawHintCircle(__hintCtx, ts, hintX, hintY, __hintFadeAlpha);
     }
 }
 

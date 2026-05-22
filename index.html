@@ -2245,7 +2245,22 @@
         let highestGlowFrame = 0;
         const glowCache = {};
         let glowProbeFinished = false;
-        const glowParallelMax = 240; // 给一个上限，找不到自动停
+        const glowParallelMax = 400; // 上限足够大，实际帧数以“从 0 起连续存在的最大 idx”为准
+        let glowProbeCompletedCount = 0; // 跟踪 onload/onerror 完成总数，防止 race
+        const finalizeGlowProbe = () => {
+            if (glowProbeFinished) return;
+            if (glowProbeCompletedCount < glowParallelMax) return;
+            // 所有探测请求都已返回，根据 glowCache 从 0 开始寻找最大连续帧
+            let cont = -1;
+            for (let k = 0; k < glowParallelMax; k++) {
+                if (glowCache[k]) cont = k; else break;
+            }
+            if (cont < 0) return; // 全都加载失败，不设完成
+            highestGlowFrame = cont;
+            totalGlowFrames = highestGlowFrame + 1;
+            glowProbeFinished = true;
+            console.log('Glow序列帧预加载完成，总帧数：', totalGlowFrames);
+        };
         for (let i = 0; i < glowParallelMax; i++) {
           const frameStr = i.toString().padStart(5, '0');
           const src = `sunflower-assets/sunflower_glow/sunflower_glow_${frameStr}.jpg`;
@@ -2254,15 +2269,12 @@
           (function(idx, source){
             tempImg.onload = () => {
               glowCache[idx] = source;
-              if (idx > highestGlowFrame) highestGlowFrame = idx;
-              totalGlowFrames = highestGlowFrame + 1;
+              glowProbeCompletedCount++;
+              finalizeGlowProbe();
             };
             tempImg.onerror = () => {
-              if (!glowProbeFinished && idx <= highestGlowFrame + 1) {
-                glowProbeFinished = true;
-                totalGlowFrames = highestGlowFrame + 1;
-                console.log('Glow序列帧预加载完成，总帧数：', totalGlowFrames);
-              }
+              glowProbeCompletedCount++;
+              finalizeGlowProbe();
             };
           })(i, src);
           tempImg.src = src;
@@ -2298,6 +2310,38 @@
         const baseRadius = 18; 
         const whiteLineWidth = 3.5;
         const blackStrokeWidth = 0.75;
+
+        // === 聚光灯遮罩：全屏径向渐厸，中心镂空，周围压暗 ===
+        // hitArea 位于 right:5% top:20%、尺寸 300x300，因此圆环中心在视口坐标：
+        //   x = 100% - 5% - 150px（即 calc(95% - 150px)）
+        //   y = 20% + 150px
+        const hintMask = document.createElement('div');
+        hintMask.style.position = 'fixed';
+        hintMask.style.left = '0';
+        hintMask.style.top = '0';
+        hintMask.style.width = '100vw';
+        hintMask.style.height = '100vh';
+        hintMask.style.pointerEvents = 'none';
+        hintMask.style.opacity = '0';
+        hintMask.style.transition = 'opacity 0.6s ease-in-out';
+        // 位于 hitArea (zIndex=1000001) 之下，但高于页面主体，这样圆环依然超在遮罩之上
+        hintMask.style.zIndex = '1000000';
+        // 径向渐变：中心透明（~baseRadius*1.6 = 30px）→ 边缘半透明黑色
+        // 注：暗度由 updateHintCircle 每帧动态更新以呈现呼吸感，这里仅给一个初始静态值避免首帧空白
+        const hintMaskCx = 'calc(95% - 150px)';
+        const hintMaskCy = 'calc(20% + 150px)';
+        // 与 canvas 模块一致的呼吸峰值暗度。注：canvas 版本最暗点在画布最远角，
+        // 这里让停点拉到视口边缘附近，表现其他章节类似的柔和过渡
+        const hintMaskPeakDark = 0.5;
+        const buildHintMaskBg = (darkAlpha) => (
+            `radial-gradient(circle at ${hintMaskCx} ${hintMaskCy}, ` +
+            `rgba(0,0,0,0) 30px, ` +
+            `rgba(0,0,0,${(darkAlpha * 0.18).toFixed(3)}) 180px, ` +
+            `rgba(0,0,0,${(darkAlpha * 0.55).toFixed(3)}) 480px, ` +
+            `rgba(0,0,0,${darkAlpha.toFixed(3)}) 900px)`
+        );
+        hintMask.style.background = buildHintMaskBg(hintMaskPeakDark);
+        document.body.appendChild(hintMask);
         
         const hintWhiteCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         hintWhiteCircle.setAttribute('cx', '60');
@@ -2325,9 +2369,14 @@
         const updateHintCircle = (timestamp) => {
             if (!hintPulseActive) return;
             
-            const scale = 1 + Math.sin(timestamp * pulseSpeed) * 0.3; 
+            const sinVal = Math.sin(timestamp * pulseSpeed);
+            const scale = 1 + sinVal * 0.3; 
             const currentRadius = baseRadius * scale;
-            const alpha = 0.5 + Math.sin(timestamp * pulseSpeed) * 0.3; 
+            const alpha = 0.5 + sinVal * 0.3; 
+            
+            // 聚光灯遮罩呼吸：暗度区间 0.7~1.0，与各 canvas 模块的 drawHintSpotlight 节奏一致
+            const maskBreath = 0.85 + sinVal * 0.15;
+            hintMask.style.background = buildHintMaskBg(hintMaskPeakDark * maskBreath);
             
             hintWhiteCircle.setAttribute('r', currentRadius.toString());
             hintWhiteCircle.setAttribute('stroke', `rgba(255, 255, 255, ${alpha})`);
@@ -2388,6 +2437,7 @@
         const showHint = () => {
             if (glowState !== 'IDLE' && glowState !== 'REWINDING') return;
             hintSvg.style.opacity = '1';
+            hintMask.style.opacity = '1';
             if (!hintPulseActive) {
                 hintPulseActive = true;
                 requestAnimationFrame(updateHintCircle);
@@ -2523,6 +2573,7 @@
             
             // 隐藏呼吸圈
             hintSvg.style.opacity = '0';
+            hintMask.style.opacity = '0';
             if (hintAudio) {
                 fadeOutAudio(hintAudio, 300);
             }

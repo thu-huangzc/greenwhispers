@@ -572,14 +572,35 @@ const hintCircleConfig = {
     blackStrokeWidth: 0.75   // 黑色描边的粗细（像素，1px 约等于 0.75pt）
 };
 
+// === 渲染聚光灯（周围压暗，中心镂空）===
+function drawHintSpotlight(ctxLocal, timestamp, x, y, fadeAlpha = 1) {
+    const { baseRadius, pulseSpeed } = hintCircleConfig;
+    const innerRadius = baseRadius * 1.6;
+    const w = ctxLocal.canvas.width;
+    const h = ctxLocal.canvas.height;
+    const outerRadius = Math.hypot(Math.max(x, w - x), Math.max(y, h - y));
+    const breath = 0.85 + Math.sin(timestamp * pulseSpeed) * 0.15;
+    const darkAlpha = 0.55 * breath * fadeAlpha;
+
+    ctxLocal.save();
+    const grad = ctxLocal.createRadialGradient(x, y, innerRadius, x, y, outerRadius);
+    grad.addColorStop(0,    'rgba(0, 0, 0, 0)');
+    grad.addColorStop(0.25, `rgba(0, 0, 0, ${darkAlpha * 0.35})`);
+    grad.addColorStop(0.6,  `rgba(0, 0, 0, ${darkAlpha * 0.75})`);
+    grad.addColorStop(1,    `rgba(0, 0, 0, ${darkAlpha})`);
+    ctxLocal.fillStyle = grad;
+    ctxLocal.fillRect(0, 0, w, h);
+    ctxLocal.restore();
+}
+
 // === 渲染提示圆环（画到 overlay 上）===
-function drawHintCircle(ctxLocal, timestamp, x, y) {
+function drawHintCircle(ctxLocal, timestamp, x, y, fadeAlpha = 1) {
     const { baseRadius, pulseSpeed, whiteLineWidth, blackStrokeWidth } = hintCircleConfig;
     
     // 利用 sin 函数生成一个有回弹呼吸感的缩放比例
     const scale = 1 + Math.sin(timestamp * pulseSpeed) * 0.3; 
     const currentRadius = baseRadius * scale;
-    const alpha = 0.5 + Math.sin(timestamp * pulseSpeed) * 0.3; // 透明度也跟着呼吸
+    const alpha = (0.5 + Math.sin(timestamp * pulseSpeed) * 0.3) * fadeAlpha; // 透明度也跟着呼吸
 
     ctxLocal.save();
     
@@ -607,20 +628,45 @@ function drawHintCircle(ctxLocal, timestamp, x, y) {
     ctxLocal.restore();
 }
 
+// 提示整体淡入淡出状态
+let __hintFadeAlpha = 0;
+let __hintLastTs = 0;
+const __HINT_FADE_DURATION = 420;
+
 // 每个 rAF tick 调用一次：根据 currentState 在 overlay canvas 上绘制 / 清除圆环。
 // 此函数只清/画一个小圆环区域，开销极小。
 function __updateHintOverlay(timestamp) {
+    const ts = timestamp || performance.now();
+    const dt = __hintLastTs ? Math.min(ts - __hintLastTs, 100) : 16;
+    __hintLastTs = ts;
+
+    // 计算本帧是否有提示点，以及位置
+    let target = 0;
+    let hintX = 0, hintY = 0;
+    if ((currentState === STATES.SWAYING || currentState === STATES.RETURNING) && !hasFirstOpenFinished) {
+        target = 1;
+        hintX = __hintCanvas.width * interactionConfig.hint1.x;
+        hintY = __hintCanvas.height * interactionConfig.hint1.y;
+    } else if (currentState === STATES.IDLE) {
+        target = 1;
+        hintX = __hintCanvas.width * interactionConfig.hint2.x;
+        hintY = __hintCanvas.height * interactionConfig.hint2.y;
+    }
+
+    if (__hintFadeAlpha !== target) {
+        const step = dt / __HINT_FADE_DURATION;
+        if (target > __hintFadeAlpha) {
+            __hintFadeAlpha = Math.min(1, __hintFadeAlpha + step);
+        } else {
+            __hintFadeAlpha = Math.max(0, __hintFadeAlpha - step);
+        }
+    }
+
     // 清空 overlay
     __hintCtx.clearRect(0, 0, __hintCanvas.width, __hintCanvas.height);
-    
-    if ((currentState === STATES.SWAYING || currentState === STATES.RETURNING) && !hasFirstOpenFinished) {
-        const hintX = __hintCanvas.width * interactionConfig.hint1.x;
-        const hintY = __hintCanvas.height * interactionConfig.hint1.y;
-        drawHintCircle(__hintCtx, timestamp, hintX, hintY);
-    } else if (currentState === STATES.IDLE) {
-        const hintX = __hintCanvas.width * interactionConfig.hint2.x;
-        const hintY = __hintCanvas.height * interactionConfig.hint2.y;
-        drawHintCircle(__hintCtx, timestamp, hintX, hintY);
+    if (__hintFadeAlpha > 0.001 && target > 0) {
+        drawHintSpotlight(__hintCtx, ts, hintX, hintY, __hintFadeAlpha);
+        drawHintCircle(__hintCtx, ts, hintX, hintY, __hintFadeAlpha);
     }
     // 其他状态：overlay 保持已清空（已经 clearRect）
 }
@@ -728,7 +774,8 @@ function renderLoop(timestamp) {
                 // 确保在最后也能画出提示圆环（因为这个时候相当于即将进入摇摆状态）
                 const hintX = canvas.width / 2;
                 const hintY = canvas.height / 2;
-                drawHintCircle(ctx, timestamp, hintX, hintY);
+                drawHintSpotlight(ctx, timestamp, hintX, hintY, 1);
+                drawHintCircle(ctx, timestamp, hintX, hintY, 1);
                 
                 lastRenderedImageSrc = "crossfade_grow_" + currentGrowFrame;
             }
@@ -1006,7 +1053,8 @@ function renderLoop(timestamp) {
             // 确保在最后也能画出提示圆环
             const hintX = canvas.width / 2;
             const hintY = canvas.height / 2;
-            drawHintCircle(ctx, timestamp, hintX, hintY);
+            drawHintSpotlight(ctx, timestamp, hintX, hintY, 1);
+            drawHintCircle(ctx, timestamp, hintX, hintY, 1);
             
             lastRenderedImageSrc = "crossfade_open_" + currentCloseFrame;
         } else if (currentCloseFrame >= fadeFrames) {

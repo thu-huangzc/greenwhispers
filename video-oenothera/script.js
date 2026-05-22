@@ -548,14 +548,35 @@ function drawImageToCtx(img, alpha = 1.0) {
     if (alpha !== 1.0) ctx.globalAlpha = 1.0;
 }
 
+// === 渲染聚光灯（周围压暗，中心镂空）===
+function drawHintSpotlight(ctx, timestamp, x, y, fadeAlpha = 1) {
+    const { baseRadius, pulseSpeed } = hintCircleConfig;
+    const innerRadius = baseRadius * 1.6;
+    const w = ctx.canvas.width;
+    const h = ctx.canvas.height;
+    const outerRadius = Math.hypot(Math.max(x, w - x), Math.max(y, h - y));
+    const breath = 0.85 + Math.sin(timestamp * pulseSpeed) * 0.15;
+    const darkAlpha = 0.55 * breath * fadeAlpha;
+
+    ctx.save();
+    const grad = ctx.createRadialGradient(x, y, innerRadius, x, y, outerRadius);
+    grad.addColorStop(0,    'rgba(0, 0, 0, 0)');
+    grad.addColorStop(0.25, `rgba(0, 0, 0, ${darkAlpha * 0.35})`);
+    grad.addColorStop(0.6,  `rgba(0, 0, 0, ${darkAlpha * 0.75})`);
+    grad.addColorStop(1,    `rgba(0, 0, 0, ${darkAlpha})`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+}
+
 // === 渲染提示圆环的函数 ===
-function drawHintCircle(ctx, timestamp, x, y) {
+function drawHintCircle(ctx, timestamp, x, y, fadeAlpha = 1) {
     const { baseRadius, pulseSpeed, whiteLineWidth, blackStrokeWidth } = hintCircleConfig;
     
     // 利用 sin 函数生成一个有回弹呼吸感的缩放比例
     const scale = 1 + Math.sin(timestamp * pulseSpeed) * 0.3; 
     const currentRadius = baseRadius * scale;
-    const alpha = 0.5 + Math.sin(timestamp * pulseSpeed) * 0.3; 
+    const alpha = (0.5 + Math.sin(timestamp * pulseSpeed) * 0.3) * fadeAlpha; 
 
     ctx.save();
     
@@ -580,13 +601,34 @@ function drawHintCircle(ctx, timestamp, x, y) {
     ctx.restore();
 }
 
+// 提示整体淡入淡出状态
+let __hintFadeAlpha = 0;
+let __hintLastTs = 0;
+const __HINT_FADE_DURATION = 420;
+
 // 每个 rAF tick 调用：在 overlay canvas 上绘制 / 清除提示圆环。
 function __updateHintOverlay(timestamp) {
+    const ts = timestamp || performance.now();
+    const dt = __hintLastTs ? Math.min(ts - __hintLastTs, 100) : 16;
+    __hintLastTs = ts;
+
+    const wantShow = (currentState === STATES.IDLE);
+    const target = wantShow ? 1 : 0;
+    if (__hintFadeAlpha !== target) {
+        const step = dt / __HINT_FADE_DURATION;
+        if (target > __hintFadeAlpha) {
+            __hintFadeAlpha = Math.min(1, __hintFadeAlpha + step);
+        } else {
+            __hintFadeAlpha = Math.max(0, __hintFadeAlpha - step);
+        }
+    }
+
     __hintCtx.clearRect(0, 0, __hintCanvas.width, __hintCanvas.height);
-    if (currentState === STATES.IDLE) {
+    if (__hintFadeAlpha > 0.001) {
         const hintX = __hintCanvas.width * interactionConfig.hint.x;
         const hintY = __hintCanvas.height * interactionConfig.hint.y;
-        drawHintCircle(__hintCtx, timestamp || performance.now(), hintX, hintY);
+        drawHintSpotlight(__hintCtx, ts, hintX, hintY, __hintFadeAlpha);
+        drawHintCircle(__hintCtx, ts, hintX, hintY, __hintFadeAlpha);
     }
 }
 
@@ -680,10 +722,11 @@ function renderLoop(timestamp) {
             const idleImg = idleImages[Math.floor(currentIdleFrame)];
             if (idleImg) {
                 drawImageToCtx(idleImg, 1.0 - transitionAlpha);
-                // 绘制提示圆环
+                // 绘制提示聚光灯 + 圆环
                 const hintX = canvas.width * interactionConfig.hint.x;
                 const hintY = canvas.height * interactionConfig.hint.y;
-                drawHintCircle(ctx, timestamp, hintX, hintY);
+                drawHintSpotlight(ctx, timestamp, hintX, hintY, 1);
+                drawHintCircle(ctx, timestamp, hintX, hintY, 1);
             }
         } else {
             const imgToDraw = idleImages[Math.floor(currentIdleFrame)];
@@ -847,6 +890,15 @@ function renderLoop(timestamp) {
             currentBugFlyinFrame = bugFlyinFramesCount - 1;
             console.log("bugflyin 播放完毕，交互结束。");
             currentState = STATES.FINISHED;
+
+            // 本章节序列帧播放结束：淡出蜜蜂音效
+            if (!window.__oenotheraBeesFadedOut) {
+                window.__oenotheraBeesFadedOut = true;
+                const beesAudio = audioConfig.bees;
+                if (beesAudio && !beesAudio.paused) {
+                    fadeAudio(beesAudio, 0, 1200);
+                }
+            }
         }
         
         const imgToDraw = bugFlyinImages[Math.floor(currentBugFlyinFrame)];
